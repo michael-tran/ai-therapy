@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import './App.css'
+import { generateReplyStream } from './ai';
 
 interface Message {
   id: number;
@@ -23,30 +24,44 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isThinking) return;
 
-    const newMessage: Message = {
-      id: Date.now(),
-      text: input,
-      sender: 'user',
-    };
-
+    const userText = input.trim();
+    const userMsg = { id: Date.now(), text: userText, sender: 'user' } as Message;
+    setMessages((prev) => [...prev, userMsg]);
+    setInput('');
     setIsThinking(true);
 
-    setMessages([...messages, newMessage]);
-    setInput('');
+    const aiMsgId = Date.now() + 1;
+    setMessages((prev) => [...prev, { id: aiMsgId, text: '', sender: 'ai' }]);
 
-    // Simulate AI response
-    setTimeout(() => {
-      setMessages(prev => [...prev, {
-        id: Date.now() + 1,
-        text: "This is a clean, minimal response.",
-        sender: 'ai'
-      }]);
+    try {
+      const finalText = await generateReplyStream(
+        userText,
+        (_tokenId: number, tokenText: string) => {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === aiMsgId ? { ...m, text: m.text + tokenText } : m)),
+          );
+        },
+        120,
+      );
+
+      // Ensure final text is reflected (in case decoding differs from streamed pieces)
+      if (finalText && finalText.length > 0) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === aiMsgId ? { ...m, text: finalText } : m)),
+        );
+      }
+    } catch (error) {
+      console.error('generateReplyStream failed', error);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === aiMsgId ? { ...m, text: 'Sorry, something went wrong.' } : m)),
+      );
+    } finally {
       setIsThinking(false);
-    }, 1000);
+    }
   };
 
   return (
