@@ -8,7 +8,7 @@ transformersEnv.localModelPath = '/';
 transformersEnv.allowLocalModels = true;
 transformersEnv.allowRemoteModels = false;
 
-const MODEL_PATH = '/model_int8.onnx';
+const MODEL_PATH = import.meta.env.BASE_URL + 'model_int8.onnx';
 const TOKENIZER_PATH = 'smol';
 let EOS_TOKEN_ID: number | null = null;
 
