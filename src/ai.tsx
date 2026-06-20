@@ -4,7 +4,7 @@ import { AutoTokenizer, env as transformersEnv } from '@xenova/transformers';
 let tokenizer: any = null;
 let session: ort.InferenceSession | null = null;
 
-transformersEnv.localModelPath = '/';
+transformersEnv.localModelPath = import.meta.env.BASE_URL || '/';;
 transformersEnv.allowLocalModels = true;
 transformersEnv.allowRemoteModels = false;
 
