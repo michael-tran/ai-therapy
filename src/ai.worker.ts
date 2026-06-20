@@ -132,9 +132,9 @@ self.addEventListener('message', async (ev) => {
         }
         const nextTokenId = maxIdx;
 
-        self.postMessage({ type: 'token', tokenId: nextTokenId });
-
         if (eosTokenId !== null && nextTokenId === eosTokenId) break;
+
+        self.postMessage({ type: 'token', tokenId: nextTokenId });
 
         generated.push(nextTokenId);
       }
