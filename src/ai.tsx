@@ -92,7 +92,10 @@ export async function initWorkerSession() {
       }
     };
     w.addEventListener('message', onMsg);
-    w.postMessage({ type: 'init', modelPath: MODEL_PATH });
+
+    const baseUrl = import.meta.env.BASE_URL || '/';
+    const partCount = 3; // update this if you have more or fewer parts
+    w.postMessage({ type: 'init', baseUrl, partCount });
   });
 }
 

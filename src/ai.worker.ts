@@ -14,12 +14,41 @@ function createTensorFromNumbers(type: 'int32' | 'int64' | 'float32', values: nu
   return new ort.Tensor('float32', Float32Array.from(values), shape);
 }
 
+async function fetchArrayBufferOrThrow(url: string) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Failed to fetch ${url}: ${r.status}`);
+  return await r.arrayBuffer();
+}
+
+async function loadModelFromParts(baseUrl: string, partCount: number) {
+  const parts: Uint8Array[] = [];
+  for (let i = 1; i <= partCount; i++) {
+    const name = `model_int8.onnx.part${String(i).padStart(2, '0')}`;
+    const url = `${baseUrl}${name}`;
+    const ab = await fetchArrayBufferOrThrow(url);
+    parts.push(new Uint8Array(ab));
+  }
+
+  const total = parts.reduce((sum, p) => sum + p.length, 0);
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of parts) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return merged.buffer;
+}
+
 self.addEventListener('message', async (ev) => {
   const msg = ev.data;
   try {
     if (msg.type === 'init') {
-      const modelPath = msg.modelPath || '/model_int8.onnx';
-      session = await ort.InferenceSession.create(modelPath, {
+      const baseUrl = msg.baseUrl || '/';
+      const partCount = msg.partCount ?? 3;
+
+      const modelBuffer = await loadModelFromParts(baseUrl, partCount);
+      session = await ort.InferenceSession.create(modelBuffer, {
         executionProviders: ['webgl', 'wasm'],
         graphOptimizationLevel: 'all',
       });
