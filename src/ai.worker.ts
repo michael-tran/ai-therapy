@@ -1,4 +1,3 @@
-// src/ai.worker.ts
 import * as ort from 'onnxruntime-web';
 
 let session: ort.InferenceSession | null = null;
