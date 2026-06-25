@@ -1,4 +1,4 @@
-import { AutoTokenizer, env as transformersEnv } from '@xenova/transformers';
+import { AutoTokenizer, env as transformersEnv } from '@huggingface/transformers';
 
 let tokenizer: any = null;
 
