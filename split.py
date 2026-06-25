@@ -1,5 +1,5 @@
 from pathlib import Path
-src = Path('public/model_int8.onnx')   # adjust if your file lives elsewhere
+src = Path('public/smol/model_int8.onnx')   # adjust if your file lives elsewhere
 if not src.exists():
     raise SystemExit(f"Source not found: {src}")
 out_dir = Path('public')

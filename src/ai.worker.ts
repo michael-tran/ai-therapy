@@ -1,6 +1,10 @@
 import * as ort from 'onnxruntime-web';
 
 let session: ort.InferenceSession | null = null;
+let modelNumHeads = 3; // Default fallback layout
+ort.env.wasm.numThreads = 0;
+ort.env.wasm.proxy = true;
+
 
 function createTensorFromNumbers(type: 'int32' | 'int64' | 'float32', values: number[], shape: number[]) {
   if (type === 'int32') {
@@ -29,8 +33,6 @@ async function fetchArrayBufferOrThrow(url: string) {
   return await r.arrayBuffer();
 }
 
-ort.env.wasm.numThreads = 0;
-
 async function loadModelFromParts(baseUrl: string, partCount: number): Promise<Uint8Array> {
   const parts: Uint8Array[] = [];
   for (let i = 1; i <= partCount; i++) {
@@ -57,6 +59,11 @@ self.addEventListener('message', async (ev) => {
     if (msg.type === 'init') {
       const baseUrl = msg.baseUrl || '/';
       const partCount = msg.partCount ?? 6;
+      
+      // Capture the specific architectural head layout passed from the frontend configuration
+      if (msg.numHeads) {
+        modelNumHeads = msg.numHeads;
+      }
 
       const modelBuffer = await loadModelFromParts(baseUrl, partCount);
       console.log(`Successfully merged ${modelBuffer.byteLength} bytes.`);
@@ -84,9 +91,6 @@ self.addEventListener('message', async (ev) => {
         }
       });
 
-      // Verify it's no longer empty!
-      console.log("Populated cleanInputMetadata:", cleanInputMetadata);
-
       self.postMessage({
         type: 'inited',
         inputNames: session.inputNames,
@@ -98,8 +102,6 @@ self.addEventListener('message', async (ev) => {
 
     if (msg.type === 'generate') {
       if (!session) throw new Error('session not initialized');
-
-      console.log("Inside Generate method")
 
       const inputIds: number[] = msg.inputIds;
       const maxLength: number = msg.maxLength ?? 50;
@@ -124,36 +126,25 @@ self.addEventListener('message', async (ev) => {
             feeds[name] = createTensorFromNumbers(type === 'int32' ? 'int32' : 'int64', new Array(seqLen).fill(1), [1, seqLen]);
           } else if (name === 'position_ids') {
             feeds[name] = createTensorFromNumbers(type === 'int32' ? 'int32' : 'int64', generated.map((_, i) => i), [1, seqLen]);
-          } else if (name.toLowerCase().includes('past') || name.toLowerCase().includes('present') || name.toLowerCase().includes('key')) {
-            // 1. Get the dynamic dimensions directly defined by the ONNX model's metadata
-            const dims: number[] = Array.isArray(meta.dims) ? [...meta.dims] : [1, 3, 0, 64];
-            
-            // 2. Dynamically replace batch (-1 or dynamic string) with 1, and sequence length with 0 for the first iteration
-            // Note: ONNX metadata sometimes uses string names or negative numbers for dynamic axes
-            const shape = dims.map((d, idx) => {
-              if (typeof d === 'number' && d > 0) return d;
-              
-              // Usually, index 0 is batch, index 2 is sequence length in [B, H, S, D]
-              // If it's the sequence length axis, we start with 0 history.
-              if (idx === 2 || d === 'sequence_length') return 0; 
-              return 1; // Default fallback for batch size or dynamic heads
-            });
-
-            // 3. Check if the model returned previous outputs we can feed back in (True KV Caching)
-            // If this isn't the first step, we look for the corresponding output tensor name from the last run
+          } else if (name.toLowerCase().includes('past') || name.toLowerCase().includes('present') || name.toLowerCase().includes('key') || name.toLowerCase().includes('value')) {
             const correspondingOutputName = name.replace('past_key_values', 'present_key_values').replace('past', 'present');
-            // If we have previous cache outputs, feed them right back in
+            
             if (step > 0 && lastOutputs && lastOutputs[correspondingOutputName]) {
               feeds[name] = lastOutputs[correspondingOutputName];
             } else {
-              // Step 0 fallback: Generate initial empty cache tensors dynamically
-              const dims: number[] = Array.isArray(meta.dims) ? [...meta.dims] : [1, 3, 0, 64];
+              const modelDims = meta.dims || meta.dimensions;
+              const dims: (number | string)[] = Array.isArray(modelDims) ? [...modelDims] : [1, modelNumHeads, 0, 64];
+              
               const shape = dims.map((d, idx) => {
                 if (typeof d === 'number' && d > 0) return d;
                 if (idx === 2 || d === 'sequence_length') return 0; 
-                return 1;
+                
+                // If index 1 represents attention heads and came through as dynamic/symbolic,
+                // apply our verified runtime layout configuration variable.
+                if (idx === 1) return modelNumHeads; 
+                
+                return 1; 
               });
-              
 
               const size = shape.reduce((a, b) => a * b, 1);
               const zeros = size > 0 ? new Array(size).fill(0) : [];

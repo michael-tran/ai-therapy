@@ -1,14 +1,33 @@
 import { AutoTokenizer, env as transformersEnv } from '@huggingface/transformers';
 
 let tokenizer: any = null;
+let aiWorker: Worker | null = null;
+let isWorkerInited = false;        // Track initialization state
+let workerInitPromise: Promise<void> | null = null; // Prevent concurrent initialization calls
 
 transformersEnv.localModelPath = import.meta.env.BASE_URL || '/';;
 transformersEnv.allowLocalModels = true;
 transformersEnv.allowRemoteModels = false;
 
-// const MODEL_PATH = import.meta.env.BASE_URL + 'model_int8.onnx';
-const TOKENIZER_PATH = 'smol360';
 let EOS_TOKEN_ID: number | null = null;
+
+const MODEL_CONFIGS = {
+  smol: {
+    tokenizerPath: 'smol/',
+    partCount: 3,
+    numHeads: 3
+  },
+  smol360: {
+    tokenizerPath: 'smol360/',
+    partCount: 6,
+    numHeads: 5
+  }
+};
+
+const ACTIVE_MODEL_KEY: 'smol' | 'smol360' = 'smol360';
+
+const SELECTED_CONFIG = MODEL_CONFIGS[ACTIVE_MODEL_KEY];
+const TOKENIZER_PATH = SELECTED_CONFIG.tokenizerPath+"config";
 
 async function initTokenizer() {
   if (tokenizer) return tokenizer;
@@ -29,8 +48,6 @@ async function initTokenizer() {
   }
 }
 
-let aiWorker: Worker | null = null;
-
 export function startAiWorker() {
   if (aiWorker) return aiWorker;
   aiWorker = new Worker(new URL('./ai.worker.ts', import.meta.url), { type: 'module' });
@@ -38,30 +55,40 @@ export function startAiWorker() {
 }
 
 export async function initWorkerSession() {
-  const w = startAiWorker();
-  return new Promise<void>((resolve, reject) => {
+  if (isWorkerInited) return; // Skip if already initialized
+  if (workerInitPromise) return workerInitPromise; // Return existing ongoing initialization
+  workerInitPromise = new Promise<void>((resolve, reject) => {
+    const w = startAiWorker();
     const onMsg = (ev: MessageEvent) => {
       const m = ev.data;
       if (m?.type === 'inited') {
         w.removeEventListener('message', onMsg);
+        isWorkerInited = true; // Mark as done!
         resolve();
       } else if (m?.type === 'error') {
         w.removeEventListener('message', onMsg);
+        workerInitPromise = null; // Allow retrying if it fails
         reject(new Error(m.message || 'worker init error'));
       }
     };
     w.addEventListener('message', onMsg);
 
     const baseUrl = import.meta.env.BASE_URL || '/';
-    const partCount = 6; // update this if you have more or fewer parts
-    w.postMessage({ type: 'init', baseUrl, partCount });
+    w.postMessage({ 
+      type: 'init', 
+      baseUrl: baseUrl+SELECTED_CONFIG.tokenizerPath, 
+      partCount: SELECTED_CONFIG.partCount, 
+      numHeads: SELECTED_CONFIG.numHeads 
+    });
   });
+
+  return workerInitPromise;
 }
 
 // Streamed generation: returns a promise that resolves to final text and accepts an onToken callback
 export async function generateReplyStream(userText: string, onToken: (tokenId: number, tokenText: string) => void, maxLength = 120) {
-  const tok = await initTokenizer();
-  await initWorkerSession(); // ensure worker created AND session initialized
+  await initTokenizer();
+  await initWorkerSession();
   startAiWorker();
 
   // Define the conversation structure
@@ -75,7 +102,8 @@ export async function generateReplyStream(userText: string, onToken: (tokenId: n
       content: userText 
     }
   ];
-  const prompt = tok.apply_chat_template(messages, {
+
+  const prompt = tokenizer.apply_chat_template(messages, {
     tokenize: false,
     add_generation_prompt: true,
   }) as string;
