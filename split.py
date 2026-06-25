@@ -1,5 +1,5 @@
 from pathlib import Path
-src = Path('public/model_int8.onnx_data')   # adjust if your file lives elsewhere
+src = Path('public/model_int8.onnx')   # adjust if your file lives elsewhere
 if not src.exists():
     raise SystemExit(f"Source not found: {src}")
 out_dir = Path('public')
@@ -11,7 +11,7 @@ with src.open('rb') as f:
         chunk = f.read(chunk_size)
         if not chunk:
             break
-        name = f'model_int8.onnx_data.part{str(i).zfill(2)}'
+        name = f'model_int8.onnx.part{str(i).zfill(2)}'
         out = out_dir / name
         out.write_bytes(chunk)
         print('wrote', out)

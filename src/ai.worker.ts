@@ -15,13 +15,23 @@ function createTensorFromNumbers(type: 'int32' | 'int64' | 'float32', values: nu
 
 async function fetchArrayBufferOrThrow(url: string) {
   const r = await fetch(url);
-  if (!r.ok) throw new Error(`Failed to fetch ${url}: ${r.status}`);
+  
+  // 1. STRICTOR CHECK: Catch hidden 404/SPA route fallback pages
+  if (!r.ok) {
+    throw new Error(`HTTP Error fetching chunk! Status: ${r.status} for URL: ${url}`);
+  }
+  
+  const contentType = r.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    throw new Error(`Security/Routing Error: Server returned an HTML page instead of binary data for URL: ${url}. Check your public folder file names.`);
+  }
+
   return await r.arrayBuffer();
 }
 
 ort.env.wasm.numThreads = 0;
 
-async function loadModelFromParts(baseUrl: string, partCount: number) {
+async function loadModelFromParts(baseUrl: string, partCount: number): Promise<Uint8Array> {
   const parts: Uint8Array[] = [];
   for (let i = 1; i <= partCount; i++) {
     const name = `model_int8.onnx.part${String(i).padStart(2, '0')}`;
@@ -38,7 +48,7 @@ async function loadModelFromParts(baseUrl: string, partCount: number) {
     offset += chunk.length;
   }
 
-  return merged.buffer;
+  return merged; // <-- Return the Uint8Array view directly
 }
 
 self.addEventListener('message', async (ev) => {
@@ -46,25 +56,50 @@ self.addEventListener('message', async (ev) => {
   try {
     if (msg.type === 'init') {
       const baseUrl = msg.baseUrl || '/';
-      const partCount = msg.partCount ?? 3;
+      const partCount = msg.partCount ?? 6;
 
       const modelBuffer = await loadModelFromParts(baseUrl, partCount);
+      console.log(`Successfully merged ${modelBuffer.byteLength} bytes.`);
+
       session = await ort.InferenceSession.create(modelBuffer, {
-        executionProviders: ['webgl', 'wasm'],
+        executionProviders: ['wasm'],
         graphOptimizationLevel: 'all',
       });
+
+      // FIX: Robustly extract metadata by mapping directly over the verified inputNames array
+      const cleanInputMetadata: Record<string, any> = {};
+      
+      session.inputNames.forEach((name) => {
+        // Safe access on the internal metadata map
+        const meta = (session.inputMetadata as any)[name];
+        if (meta) {
+          cleanInputMetadata[name] = {
+            type: meta.type || 'float32',
+            // Ensure dims is explicitly cloned out as a plain JS number array
+            dims: Array.isArray(meta.dims) ? [...meta.dims] : (meta.shape ? [...meta.shape] : [])
+          };
+        } else {
+          // Absolute safety fallback if the lookup key acts weirdly
+          cleanInputMetadata[name] = { type: 'float32', dims: [] };
+        }
+      });
+
+      // Verify it's no longer empty!
+      console.log("Populated cleanInputMetadata:", cleanInputMetadata);
 
       self.postMessage({
         type: 'inited',
         inputNames: session.inputNames,
         outputNames: session.outputNames,
-        inputMetadata: session.inputMetadata,
+        inputMetadata: cleanInputMetadata,
       });
       return;
     }
 
     if (msg.type === 'generate') {
       if (!session) throw new Error('session not initialized');
+
+      console.log("Inside Generate method")
 
       const inputIds: number[] = msg.inputIds;
       const maxLength: number = msg.maxLength ?? 50;

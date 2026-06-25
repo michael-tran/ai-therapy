@@ -7,7 +7,7 @@ transformersEnv.allowLocalModels = true;
 transformersEnv.allowRemoteModels = false;
 
 // const MODEL_PATH = import.meta.env.BASE_URL + 'model_int8.onnx';
-const TOKENIZER_PATH = 'smol';
+const TOKENIZER_PATH = 'smol360';
 let EOS_TOKEN_ID: number | null = null;
 
 async function initTokenizer() {
@@ -53,7 +53,7 @@ export async function initWorkerSession() {
     w.addEventListener('message', onMsg);
 
     const baseUrl = import.meta.env.BASE_URL || '/';
-    const partCount = 3; // update this if you have more or fewer parts
+    const partCount = 6; // update this if you have more or fewer parts
     w.postMessage({ type: 'init', baseUrl, partCount });
   });
 }
