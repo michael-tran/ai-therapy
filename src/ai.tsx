@@ -11,11 +11,22 @@ const TOKENIZER_PATH = 'smol';
 let EOS_TOKEN_ID: number | null = null;
 
 async function initTokenizer() {
-  if (tokenizer) return;
-  tokenizer = await AutoTokenizer.from_pretrained(TOKENIZER_PATH, {
-    local_files_only: true,
-  });
-  EOS_TOKEN_ID = tokenizer.eos_token_id ?? 2;
+  if (tokenizer) return tokenizer;
+  
+  try {
+    tokenizer = await AutoTokenizer.from_pretrained(TOKENIZER_PATH, {
+      local_files_only: true,
+    });
+    
+    // Fallback logic for EOS token ID
+    EOS_TOKEN_ID = tokenizer.eos_token_id ?? 2;
+    
+    console.log("Tokenizer initialized successfully!");
+    return tokenizer;
+  } catch (error) {
+    console.error("Failed to initialize tokenizer:", error);
+    throw error;
+  }
 }
 
 let aiWorker: Worker | null = null;
@@ -49,18 +60,25 @@ export async function initWorkerSession() {
 
 // Streamed generation: returns a promise that resolves to final text and accepts an onToken callback
 export async function generateReplyStream(userText: string, onToken: (tokenId: number, tokenText: string) => void, maxLength = 120) {
-  await initTokenizer();
+  const tok = await initTokenizer();
   await initWorkerSession(); // ensure worker created AND session initialized
   startAiWorker();
 
-  const prompt = `<|im_start|>system
-You are an empathetic, non-judgmental therapist. Listen, validate feelings, and ask open-ended questions to guide self-reflection. Keep responses concise, supportive, and focused on the user. Do not give medical advice. Your name is Linda.
-<|im_end|>
-<|im_start|>user
-${userText}
-<|im_end|>
-<|im_start|>assistant
-`;
+  // Define the conversation structure
+  const messages = [
+    { 
+      role: 'system', 
+      content: 'You are an empathetic, non-judgmental therapist. Listen, validate feelings, and ask open-ended questions to guide self-reflection. Keep responses concise, supportive, and focused on the user. Do not give medical advice. Your name is Linda.' 
+    },
+    { 
+      role: 'user', 
+      content: userText 
+    }
+  ];
+  const prompt = tok.apply_chat_template(messages, {
+    tokenize: false,
+    add_generation_prompt: true,
+  }) as string;
   const inputIds: number[] = await textToIds(prompt);
 
   return new Promise<string>((resolve, reject) => {

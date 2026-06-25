@@ -71,6 +71,7 @@ self.addEventListener('message', async (ev) => {
       const eosTokenId: number | null = msg.eosTokenId ?? null;
 
       const generated = [...inputIds];
+      let lastOutputs: Record<string, ort.Tensor> | null = null;
 
       for (let step = 0; step < maxLength; step++) {
         const seqLen = generated.length;
@@ -89,23 +90,44 @@ self.addEventListener('message', async (ev) => {
           } else if (name === 'position_ids') {
             feeds[name] = createTensorFromNumbers(type === 'int32' ? 'int32' : 'int64', generated.map((_, i) => i), [1, seqLen]);
           } else if (name.toLowerCase().includes('past') || name.toLowerCase().includes('present') || name.toLowerCase().includes('key')) {
-            // Ensure past/present KV inputs are rank-4 with seq axis zero: [batch, num_heads, seq_len(0), head_dim]
-            // Use metadata if available to preserve ranks, otherwise fallback to [1,3,0,64].
-            const dims: number[] = Array.isArray(meta.dims) && meta.dims.length >= 4 ? meta.dims : [1, 3, -1, 64];
+            // 1. Get the dynamic dimensions directly defined by the ONNX model's metadata
+            const dims: number[] = Array.isArray(meta.dims) ? [...meta.dims] : [1, 3, 0, 64];
+            
+            // 2. Dynamically replace batch (-1 or dynamic string) with 1, and sequence length with 0 for the first iteration
+            // Note: ONNX metadata sometimes uses string names or negative numbers for dynamic axes
             const shape = dims.map((d, idx) => {
-              // keep positive dims, map -1 (sequence axis) to 0, fallback to 1; ensure rank 4
-              if (d > 0) return d;
-              if (d === -1) return 0;
-              return idx === 2 ? 0 : 1;
+              if (typeof d === 'number' && d > 0) return d;
+              
+              // Usually, index 0 is batch, index 2 is sequence length in [B, H, S, D]
+              // If it's the sequence length axis, we start with 0 history.
+              if (idx === 2 || d === 'sequence_length') return 0; 
+              return 1; // Default fallback for batch size or dynamic heads
             });
-            const size = shape.reduce((a, b) => a * b, 1);
-            const zeros = size > 0 ? new Array(size).fill(0) : [];
-            const ttype = meta.type === 'int32' ? 'int32' : (meta.type === 'int64' ? 'int64' : 'float32');
-            feeds[name] = createTensorFromNumbers(ttype as any, zeros, shape);
+
+            // 3. Check if the model returned previous outputs we can feed back in (True KV Caching)
+            // If this isn't the first step, we look for the corresponding output tensor name from the last run
+            const correspondingOutputName = name.replace('past_key_values', 'present_key_values').replace('past', 'present');
+            // If we have previous cache outputs, feed them right back in
+            if (step > 0 && lastOutputs && lastOutputs[correspondingOutputName]) {
+              feeds[name] = lastOutputs[correspondingOutputName];
+            } else {
+              // Step 0 fallback: Generate initial empty cache tensors dynamically
+              const dims: number[] = Array.isArray(meta.dims) ? [...meta.dims] : [1, 3, 0, 64];
+              const shape = dims.map((d, idx) => {
+                if (typeof d === 'number' && d > 0) return d;
+                if (idx === 2 || d === 'sequence_length') return 0; 
+                return 1;
+              });
+              
+
+              const size = shape.reduce((a, b) => a * b, 1);
+              const zeros = size > 0 ? new Array(size).fill(0) : [];
+              const ttype = meta.type === 'int32' ? 'int32' : (meta.type === 'int64' ? 'int64' : 'float32');
+              feeds[name] = createTensorFromNumbers(ttype as any, zeros, shape);
+            }
           } else {
-            // generic fallback: build shape from metadata, map -1 -> 0
             const dims: number[] = Array.isArray(meta.dims) ? meta.dims : [1];
-            const shape = dims.map((d) => (d > 0 ? d : (d === -1 ? 0 : 1)));
+            const shape = dims.map((d) => (typeof d === 'number' && d > 0 ? d : 1));
             const size = shape.reduce((a, b) => a * b, 1);
             const zeros: number[] = size > 0 ? new Array(size).fill(0) : [];
             const ttype = meta.type === 'int32' ? 'int32' : (meta.type === 'int64' ? 'int64' : 'float32');
@@ -114,6 +136,7 @@ self.addEventListener('message', async (ev) => {
         }
 
         const outputs = await session.run(feeds);
+        lastOutputs = outputs;
 
         const logits = outputs.logits as ort.Tensor | undefined;
         if (!logits) throw new Error('no logits output from model');
