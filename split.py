@@ -1,10 +1,10 @@
 from pathlib import Path
-src = Path('public/smol/model_int8.onnx')   # adjust if your file lives elsewhere
+src = Path('public/smol360/model_int8.onnx')   # adjust if your file lives elsewhere
 if not src.exists():
     raise SystemExit(f"Source not found: {src}")
 out_dir = Path('public')
 out_dir.mkdir(exist_ok=True)
-chunk_size = 64 * 1024 * 1024  # 64 MB
+chunk_size =50 * 1024 * 1024  # 64 MB
 i = 1
 with src.open('rb') as f:
     while True:
