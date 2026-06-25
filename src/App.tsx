@@ -10,7 +10,10 @@ interface Message {
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([
-    { id: 1, text: "Hello! How can I help you today?", sender: 'ai' }
+    { id: 1, text: "I am an AI agent which runs locally on you machine!", sender: 'ai' },
+    { id: 2, text: "I done this so all data privacy stays with you!", sender: 'ai' },
+    { id: 3, text: "It is not very smart but it is still fun to use!", sender: 'ai' },
+    { id: 4, text: "Hello! How can I help you today?", sender: 'ai' }
   ]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);

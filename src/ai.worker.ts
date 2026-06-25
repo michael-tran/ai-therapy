@@ -19,6 +19,8 @@ async function fetchArrayBufferOrThrow(url: string) {
   return await r.arrayBuffer();
 }
 
+ort.env.wasm.numThreads = 0;
+
 async function loadModelFromParts(baseUrl: string, partCount: number) {
   const parts: Uint8Array[] = [];
   for (let i = 1; i <= partCount; i++) {
