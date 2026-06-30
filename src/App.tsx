@@ -1,19 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import './App.css'
-import { generateReplyStream } from './ai';
-
-interface Message {
-  id: number;
-  text: string;
-  sender: 'user' | 'ai';
-}
+import { generateReplyStream, type Message } from './ai';
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([
-    { id: 1, text: "I am an AI agent which runs locally on you machine!", sender: 'ai' },
-    { id: 2, text: "I done this so all data privacy stays with you!", sender: 'ai' },
-    { id: 3, text: "It is not very smart but it is still fun to use!", sender: 'ai' },
-    { id: 4, text: "Hello! How can I help you today?", sender: 'ai' }
+    { id: 1, content: "I am an AI agent which runs locally on you machine!", role: 'assistant' },
+    { id: 2, content: "I done this so all data privacy stays with you!", role: 'assistant' },
+    { id: 3, content: "I am a an empathetic, non-judgmental therapist. Who listen, validate feelings, and ask open-ended questions to guide self-reflection. Keep responses concise, supportive, and focused on the user. I do not give medical advice.", role: 'system' },
+    { id: 4, content: "Hello! My name is Linda. How can I help you today?", role: 'assistant' }
   ]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -32,20 +26,21 @@ function App() {
     if (!input.trim() || isThinking) return;
 
     const userText = input.trim();
-    const userMsg = { id: Date.now(), text: userText, sender: 'user' } as Message;
+    const userMsg = { id: Date.now(), content: userText, role: 'user' } as Message;
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setIsThinking(true);
 
     const aiMsgId = Date.now() + 1;
-    setMessages((prev) => [...prev, { id: aiMsgId, text: '', sender: 'ai' }]);
+    setMessages((prev) => [...prev, { id: aiMsgId, content: '', role: 'assistant' }]);
 
     try {
       const finalText = await generateReplyStream(
+        messages,
         userText,
         (_tokenId: number, tokenText: string) => {
           setMessages((prev) =>
-            prev.map((m) => (m.id === aiMsgId ? { ...m, text: m.text + tokenText } : m)),
+            prev.map((m) => (m.id === aiMsgId ? { ...m, content: m.content + tokenText } : m)),
           );
         },
         120,
@@ -54,13 +49,13 @@ function App() {
       // Ensure final text is reflected (in case decoding differs from streamed pieces)
       if (finalText && finalText.length > 0) {
         setMessages((prev) =>
-          prev.map((m) => (m.id === aiMsgId ? { ...m, text: finalText } : m)),
+          prev.map((m) => (m.id === aiMsgId ? { ...m, content: finalText } : m)),
         );
       }
     } catch (error) {
       console.error('generateReplyStream failed', error);
       setMessages((prev) =>
-        prev.map((m) => (m.id === aiMsgId ? { ...m, text: 'Sorry, something went wrong.' } : m)),
+        prev.map((m) => (m.id === aiMsgId ? { ...m, content: 'Sorry, something went wrong.' } : m)),
       );
     } finally {
       setIsThinking(false);
@@ -77,8 +72,8 @@ function App() {
 
         <div className="message-list">
           {messages.map((msg) => (
-            <div key={msg.id} className={`message-bubble ${msg.sender === 'user' ? 'user-message' : 'ai-message'}`}>
-              {msg.text}
+            <div key={msg.id} className={`message-bubble ${msg.role === 'user' ? 'user-message' : 'ai-message'}`}>
+              {msg.content}
             </div>
           ))}
           <div ref={messagesEndRef} />

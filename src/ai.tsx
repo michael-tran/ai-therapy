@@ -11,6 +11,12 @@ transformersEnv.allowRemoteModels = false;
 
 let EOS_TOKEN_ID: number | null = null;
 
+export interface Message {
+  id: number;
+  content: string;
+  role: 'user' | 'system' | 'assistant';
+}
+
 const MODEL_CONFIGS = {
   smol: {
     tokenizerPath: 'smol/',
@@ -86,10 +92,20 @@ export async function initWorkerSession() {
 }
 
 // Streamed generation: returns a promise that resolves to final text and accepts an onToken callback
-export async function generateReplyStream(userText: string, onToken: (tokenId: number, tokenText: string) => void, maxLength = 120) {
+export async function generateReplyStream(liveMessages: Message[], userText: string, onToken: (tokenId: number, tokenText: string) => void, maxLength = 120) {
   await initTokenizer();
   await initWorkerSession();
   startAiWorker();
+
+  const formattedMessages = liveMessages.map(message => ({
+    role: message.role,
+    content: message.content // Map 'context' to 'content'
+  }));
+
+  formattedMessages.push({
+    role: 'user',
+    content: userText
+  });
 
   // Define the conversation structure
   const messages = [
@@ -103,12 +119,14 @@ export async function generateReplyStream(userText: string, onToken: (tokenId: n
     }
   ];
 
+  
   const prompt = tokenizer.apply_chat_template(messages, {
     tokenize: false,
     add_generation_prompt: true,
   }) as string;
   const inputIds: number[] = await textToIds(prompt);
-
+  console.log(prompt);
+  
   return new Promise<string>((resolve, reject) => {
     if (!aiWorker) return reject(new Error('worker not created'));
     let partialIds: number[] = [];
