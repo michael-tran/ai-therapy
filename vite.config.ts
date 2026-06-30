@@ -8,6 +8,6 @@ export default defineConfig({
       "Cross-Origin-Embedder-Policy": "require-corp",
     },
   },
-  base: '/ai-therapy/', 
+  base: '/ai-chat/', 
   plugins: [react()],
 });
