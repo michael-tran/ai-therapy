@@ -106,10 +106,6 @@ export async function generateReplyStream(liveMessages: Message[], userText: str
     role: 'user',
     content: userText
   });
-  formattedMessages.push({
-    role: 'system', 
-    content: 'You are a helpful assistant. Your name is Smol.' 
-  });
   
   const prompt = tokenizer.apply_chat_template(formattedMessages.slice(-3), {
     tokenize: false,
