@@ -106,26 +106,16 @@ export async function generateReplyStream(liveMessages: Message[], userText: str
     role: 'user',
     content: userText
   });
-
-  // Define the conversation structure
-  const messages = [
-    { 
-      role: 'system', 
-      content: 'You are an empathetic, non-judgmental therapist. Listen, validate feelings, and ask open-ended questions to guide self-reflection. Keep responses concise, supportive, and focused on the user. Do not give medical advice. Your name is Linda.' 
-    },
-    { 
-      role: 'user', 
-      content: userText 
-    }
-  ];
-
+  formattedMessages.push({
+    role: 'system', 
+    content: 'You are an empathetic, non-judgmental therapist. Listen, validate feelings, and ask open-ended questions to guide self-reflection. Keep responses concise, supportive, and focused on the user. Do not give medical advice. Your name is Linda.' 
+  });
   
-  const prompt = tokenizer.apply_chat_template(messages, {
+  const prompt = tokenizer.apply_chat_template(formattedMessages.slice(-3), {
     tokenize: false,
     add_generation_prompt: true,
   }) as string;
   const inputIds: number[] = await textToIds(prompt);
-  console.log(prompt);
   
   return new Promise<string>((resolve, reject) => {
     if (!aiWorker) return reject(new Error('worker not created'));
