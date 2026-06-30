@@ -25,7 +25,7 @@ const MODEL_CONFIGS = {
   },
   smol360: {
     tokenizerPath: 'smol360/',
-    partCount: 6,
+    partCount: 7,
     numHeads: 5
   }
 };
