@@ -1,6 +1,6 @@
 import * as ort from 'onnxruntime-web';
 
-let session: ort.InferenceSession | null = null;
+let session: ort.InferenceSession;
 let modelNumHeads = 3; // Default fallback layout
 ort.env.wasm.numThreads = 0;
 ort.env.wasm.proxy = true;
