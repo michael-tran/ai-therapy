@@ -6,8 +6,7 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([
     { id: 1, content: "I am an AI agent which runs locally on you machine!", role: 'assistant' },
     { id: 2, content: "I done this so all data privacy stays with you!", role: 'assistant' },
-    { id: 3, content: "I am a an empathetic, non-judgmental therapist. Who listen, validate feelings, and ask open-ended questions to guide self-reflection. Keep responses concise, supportive, and focused on the user. I do not give medical advice.", role: 'system' },
-    { id: 4, content: "Hello! My name is Linda. How can I help you today?", role: 'assistant' }
+    { id: 3, content: "Hello! My name is Smol. How can I help you today?", role: 'assistant' }
   ]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -66,7 +65,7 @@ function App() {
     <div className="app-wrapper">
       <div className="chat-container">
         <header className="header">
-          <h1>Therapy Chat</h1>
+          <h1>AI Chat</h1>
           <div style={{ fontSize: '0.8rem', color: '#999' }}>This is a AI and not a human so take things with a gain of salt</div>
         </header>
 

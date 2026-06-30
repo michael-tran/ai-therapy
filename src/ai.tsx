@@ -108,7 +108,7 @@ export async function generateReplyStream(liveMessages: Message[], userText: str
   });
   formattedMessages.push({
     role: 'system', 
-    content: 'You are an empathetic, non-judgmental therapist. Listen, validate feelings, and ask open-ended questions to guide self-reflection. Keep responses concise, supportive, and focused on the user. Do not give medical advice. Your name is Linda.' 
+    content: 'You are a helpful assistant. Your name is Smol.' 
   });
   
   const prompt = tokenizer.apply_chat_template(formattedMessages.slice(-3), {
